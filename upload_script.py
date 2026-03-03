@@ -12,45 +12,52 @@ async def main():
     async with Client("my_account", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH) as app:
         print("Log in successful!")
 
-        # Resolve channel
+        # Step 1: Meet the channel
         try:
             await app.get_chat(CHANNEL_ID)
         except:
             async for dialog in app.get_dialogs():
                 if dialog.chat.id == CHANNEL_ID: break
 
-        files = [f for f in os.listdir('.') if f.endswith(('.mp4', '.mkv'))]
-        if not files: return
+        # Step 2: Find all video files in the downloads folder
+        download_path = "./downloads"
+        files = []
+        for root, dirs, filenames in os.walk(download_path):
+            for f in filenames:
+                if f.endswith((".mp4", ".mkv")):
+                    files.append(os.path.join(root, f))
 
-        movie_file = files[0]
-        print(f"Uploading {movie_file} with Streaming Support...")
-        
-        # CHANGED: send_video instead of send_document for instant playback
-        msg = await app.send_video(
-            chat_id=CHANNEL_ID,
-            video=movie_file,
-            supports_streaming=True, # This is the "Golden Ticket" for streaming
-            caption=f"🎥 **New Upload:** `{movie_file}`\n🚀 Status: Beastly Complete"
-        )
-        print(f"Upload Done! Message ID: {msg.id}")
-
-        # Update database.json
-        new_entry = {
-            "title": movie_file.replace(".mp4", "").replace(".mkv", ""),
-            "msg_id": msg.id,
-            "file_name": movie_file
-        }
+        if not files:
+            print("No videos found in torrent!")
+            return
 
         db_file = "database.json"
         db = []
         if os.path.exists(db_file):
-            try:
-                with open(db_file, "r") as f: db = json.load(f)
-            except: pass
+            with open(db_file, "r") as f: db = json.load(f)
 
-        db.append(new_entry)
-        with open(db_file, "w") as f: json.dump(db, f, indent=4)
-        print("Database updated!")
+        # Step 3: Upload each file one by one
+        for movie_path in files:
+            name = os.path.basename(movie_path)
+            print(f"Uploading {name}...")
+            
+            msg = await app.send_video(
+                chat_id=CHANNEL_ID,
+                video=movie_path,
+                supports_streaming=True,
+                caption=f"🎥 **Episode:** `{name}`"
+            )
+
+            db.append({
+                "title": name,
+                "msg_id": msg.id,
+                "file_name": name
+            })
+
+        # Step 4: Save database
+        with open(db_file, "w") as f:
+            json.dump(db, f, indent=4)
+        print("All episodes uploaded and database updated!")
 
 if __name__ == "__main__":
     asyncio.run(main())
