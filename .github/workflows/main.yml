@@ -33,3 +33,12 @@ jobs:
           SESSION_STRING: ${{ secrets.SESSION_STRING }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
         run: python upload_script.py
+
+      - name: Save Database Changes
+        run: |
+          git config --global user.name "telecstorage"
+          git config --global user.email "telecstorage@gmail.com"
+          git add database.json
+          git commit -m "Update movie database [skip ci]" || echo "No changes to commit"
+          git push
+
