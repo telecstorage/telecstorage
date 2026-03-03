@@ -24,10 +24,9 @@ jobs:
           # aria2c downloads the torrent content into a folder named 'downloads'
           aria2c --seed-time=0 --dir=./downloads "${{ github.event.inputs.torrent_url }}"
 
-      - name: Run Uploader
-        env:
-          API_ID: ${{ secrets.API_ID }}
-          API_HASH: ${{ secrets.API_HASH }}
-          SESSION_STRING: ${{ secrets.SESSION_STRING }}
-          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-        run: python upload_script.py
+            - name: Download Torrent
+        run: |
+          # We add '|| true' so even if aria2c times out or errors, 
+          # the script moves to the next step.
+          # Also adding a timeout of 10 minutes so it doesn't wait forever.
+          timeout 600 aria2c --seed-time=0 --dir=./downloads "${{ github.event.inputs.torrent_url }}" || true
