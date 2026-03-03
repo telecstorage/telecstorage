@@ -1,8 +1,8 @@
 import os
 import asyncio
+import json
 from pyrogram import Client
 
-# Fetching the secrets
 API_ID = os.environ.get("API_ID")
 API_HASH = os.environ.get("API_HASH")
 SESSION_STRING = os.environ.get("SESSION_STRING")
@@ -10,40 +10,35 @@ CHANNEL_ID = int(os.environ.get("CHANNEL_ID"))
 
 async def main():
     async with Client("my_account", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH) as app:
-        print("Log in successful!")
+        files = [f for f in os.listdir('.') if f.endswith(('.mp4', '.mkv'))]
+        if not files: return
 
-        # --- THE FIX STARTS HERE ---
-        # We search for the channel by ID to "cache" it in the session
-        print("Resolving channel ID...")
-        try:
-            chat = await app.get_chat(CHANNEL_ID)
-            print(f"Connected to: {chat.title}")
-        except Exception as e:
-            print(f"Error finding channel: {e}")
-            # Alternative: If it still fails, we list all chats to find it
-            async for dialog in app.get_dialogs():
-                if dialog.chat.id == CHANNEL_ID:
-                    print(f"Found channel in dialogs: {dialog.chat.title}")
-                    break
-        # --- THE FIX ENDS HERE ---
+        movie_name = files[0]
+        print(f"Uploading {movie_name}...")
         
-        # Finding the file downloaded by the GitHub Action
-        files = [f for f in os.listdir('.') if f.endswith(('.mp4', '.mkv', '.zip'))]
+        # Upload
+        msg = await app.send_document(chat_id=CHANNEL_ID, document=movie_name)
         
-        if not files:
-            print("No movie file found to upload!")
-            return
+        # --- NEW: SAVE DATA FOR THE UI ---
+        movie_data = {
+            "title": movie_name.replace(".mp4", "").replace(".mkv", ""),
+            "msg_id": msg.id,
+            "size": os.path.getsize(movie_name)
+        }
 
-        movie = files[0]
-        print(f"Uploading {movie} to Telegram...")
+        # Load existing database or create new
+        db_file = "database.json"
+        if os.path.exists(db_file):
+            with open(db_file, "r") as f:
+                db = json.load(f)
+        else:
+            db = []
+
+        db.append(movie_data)
+        with open(db_file, "w") as f:
+            json.dump(db, f, indent=4)
         
-        # Uploading the file
-        msg = await app.send_document(
-            chat_id=CHANNEL_ID,
-            document=movie,
-            caption=f"🎥 **New Upload:** `{movie}`\n🚀 Status: Beastly Complete"
-        )
-        print(f"Done! Message ID: {msg.id}")
+        print(f"Successfully added {movie_name} to database.json")
 
 if __name__ == "__main__":
     asyncio.run(main())
