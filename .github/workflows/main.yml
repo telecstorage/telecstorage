@@ -21,12 +21,22 @@ jobs:
 
       - name: Download Torrent
         run: |
-          # aria2c downloads the torrent content into a folder named 'downloads'
-          aria2c --seed-time=0 --dir=./downloads "${{ github.event.inputs.torrent_url }}"
+          # This will try to download for 15 minutes (900s). 
+          # If it hits 99% and stalls, it will force move to the next step.
+          timeout 900 aria2c --seed-time=0 --dir=./downloads "${{ github.event.inputs.torrent_url }}" || true
 
-            - name: Download Torrent
+      - name: Run Uploader
+        env:
+          API_ID: ${{ secrets.API_ID }}
+          API_HASH: ${{ secrets.API_HASH }}
+          SESSION_STRING: ${{ secrets.SESSION_STRING }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+        run: python upload_script.py
+
+      - name: Commit and Push Database
         run: |
-          # We add '|| true' so even if aria2c times out or errors, 
-          # the script moves to the next step.
-          # Also adding a timeout of 10 minutes so it doesn't wait forever.
-          timeout 600 aria2c --seed-time=0 --dir=./downloads "${{ github.event.inputs.torrent_url }}" || true
+          git config --global user.name "telecstorage"
+          git config --global user.email "telecstorage@gmail.com"
+          git add database.json
+          git commit -m "Update movie database" || echo "No changes"
+          git push
