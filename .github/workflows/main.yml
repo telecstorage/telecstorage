@@ -1,9 +1,9 @@
-name: Beastly Cloud Transporter
+name: Beastly Torrent Transporter
 on:
   workflow_dispatch:
     inputs:
-      url:
-        description: 'Direct Link to Movie'
+      torrent_url:
+        description: 'Direct Link to .torrent file or Magnet Link'
         required: true
 
 jobs:
@@ -13,18 +13,16 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install Dependencies
-        run: pip install pyrogram tgcrypto yt-dlp
-
-      - name: Download Movie
+      - name: Setup Tools
         run: |
-          # Uses yt-dlp to download from the link you provide
-          yt-dlp -o "movie.mp4" "${{ github.event.inputs.url }}"
+          sudo apt-get update
+          sudo apt-get install -y aria2
+          pip install pyrogram tgcrypto
+
+      - name: Download Torrent
+        run: |
+          # aria2c downloads the torrent content into a folder named 'downloads'
+          aria2c --seed-time=0 --dir=./downloads "${{ github.event.inputs.torrent_url }}"
 
       - name: Run Uploader
         env:
@@ -33,12 +31,3 @@ jobs:
           SESSION_STRING: ${{ secrets.SESSION_STRING }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
         run: python upload_script.py
-
-      - name: Save Database Changes
-        run: |
-          git config --global user.name "telecstorage"
-          git config --global user.email "telecstorage@gmail.com"
-          git add database.json
-          git commit -m "Update movie database [skip ci]" || echo "No changes to commit"
-          git push
-
