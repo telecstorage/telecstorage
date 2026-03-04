@@ -1,146 +1,782 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Beastly Cinema | Premium Streaming</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        body { background-color: #080b13; color: #e2e8f0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
-        .sidebar { background: #0f172a; border-right: 1px solid #1e293b; transition: all 0.3s; }
-        .movie-card { transition: all 0.4s ease; border: 1px solid transparent; }
-        .movie-card:hover { transform: translateY(-10px); border-color: #38bdf8; box-shadow: 0 0 20px rgba(56, 189, 248, 0.2); }
-        .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(10px); }
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #080b13; }
-        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
-        #video-player-container { display: none; position: fixed; inset: 0; z-index: 999; background: rgba(0,0,0,0.95); }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Beastly Cinema | Premium Streaming</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+  <style>
+    body { background-color:#080b13; color:#e2e8f0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; overflow-x:hidden; }
+    .sidebar { background:#0f172a; border-right:1px solid #1e293b; transition: all .25s ease; }
+    .glass { background: rgba(15,23,42,.72); backdrop-filter: blur(14px); }
+    .poster { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; border:1px solid transparent; }
+    .poster:hover { transform: translateY(-8px) scale(1.02); border-color:#38bdf8; box-shadow:0 0 22px rgba(56,189,248,.18); }
+    .row-scroll { scroll-snap-type:x mandatory; }
+    .row-scroll > * { scroll-snap-align:start; }
+    ::-webkit-scrollbar { height: 10px; width: 8px; }
+    ::-webkit-scrollbar-track { background: #080b13; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 999px; }
+
+    /* Player overlay */
+    #playerOverlay { opacity:0; pointer-events:none; transition: opacity .2s ease; }
+    #playerWrap.show-ui #playerOverlay { opacity:1; pointer-events:auto; }
+
+    /* Prevent iOS double-tap zoom/select weirdness on player */
+    #playerWrap, #playerWrap * { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  </style>
 </head>
-<body class="flex">
 
-    <div class="sidebar w-64 h-screen sticky top-0 flex flex-col p-6 hidden md:flex">
-        <div class="flex items-center gap-3 mb-10">
-            <div class="bg-cyan-500 p-2 rounded-lg"><i class="fas fa-play text-white"></i></div>
-            <span class="text-xl font-black tracking-tighter text-white">BEASTLY</span>
-        </div>
-        
-        <nav class="space-y-6">
-            <a href="#" class="flex items-center gap-4 text-cyan-400 font-bold"><i class="fas fa-home w-5"></i> Home</a>
-            <a href="#" class="flex items-center gap-4 hover:text-cyan-400 transition"><i class="fas fa-th-large w-5"></i> Categories</a>
-            <a href="#" class="flex items-center gap-4 hover:text-cyan-400 transition"><i class="fas fa-bookmark w-5"></i> Library</a>
-            <a href="#" class="flex items-center gap-4 hover:text-cyan-400 transition"><i class="fas fa-history w-5"></i> Recently Watched</a>
-        </nav>
+<body class="flex min-h-screen">
 
-        <div class="mt-auto p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-            <p class="text-xs text-slate-400">Logged in as</p>
-            <p class="text-sm font-bold text-white">Beastly Admin</p>
-        </div>
+  <!-- Mobile top bar -->
+  <header class="md:hidden fixed top-0 left-0 right-0 z-40 glass border-b border-slate-800">
+    <div class="flex items-center justify-between px-4 py-3">
+      <button id="openDrawer" class="p-2 rounded-lg bg-slate-900 border border-slate-800">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <div class="flex items-center gap-2">
+        <div class="bg-cyan-500 p-2 rounded-lg"><i class="fas fa-play text-white"></i></div>
+        <span class="text-lg font-black tracking-tight text-white">BEASTLY</span>
+      </div>
+      <button id="openSearch" class="p-2 rounded-lg bg-slate-900 border border-slate-800">
+        <i class="fa-solid fa-magnifying-glass"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Drawer backdrop -->
+  <div id="drawerBackdrop" class="fixed inset-0 bg-black/60 z-40 hidden"></div>
+
+  <!-- Sidebar / Drawer -->
+  <aside id="sidebar" class="sidebar w-72 md:w-64 h-screen fixed md:sticky top-0 left-0 z-50 md:z-10 flex flex-col p-6 -translate-x-full md:translate-x-0">
+    <div class="flex items-center gap-3 mb-10">
+      <div class="bg-cyan-500 p-2 rounded-lg"><i class="fas fa-play text-white"></i></div>
+      <span class="text-xl font-black tracking-tighter text-white">BEASTLY</span>
     </div>
 
-    <main class="flex-1 p-4 md:p-10">
-        <div class="flex justify-between items-center mb-10">
-            <div class="relative w-full max-w-xl">
-                <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
-                <input type="text" id="searchInput" placeholder="Search for movies, TV shows..." 
-                       class="w-full bg-slate-900 border border-slate-800 p-3 pl-12 rounded-full focus:ring-2 ring-cyan-500 focus:outline-none transition">
-            </div>
-            <div class="flex gap-4 ml-4">
-                <button class="bg-slate-800 p-3 rounded-full hover:bg-slate-700"><i class="fas fa-bell"></i></button>
-                <div class="w-10 h-10 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-full border-2 border-slate-700"></div>
-            </div>
+    <nav class="space-y-6">
+      <button data-page="home" class="navbtn w-full text-left flex items-center gap-4 text-cyan-400 font-bold">
+        <i class="fas fa-home w-5"></i> Home
+      </button>
+      <button data-page="categories" class="navbtn w-full text-left flex items-center gap-4 hover:text-cyan-400 transition">
+        <i class="fas fa-th-large w-5"></i> Categories
+      </button>
+      <button data-page="mylist" class="navbtn w-full text-left flex items-center gap-4 hover:text-cyan-400 transition">
+        <i class="fas fa-bookmark w-5"></i> My List
+      </button>
+      <button data-page="recent" class="navbtn w-full text-left flex items-center gap-4 hover:text-cyan-400 transition">
+        <i class="fas fa-history w-5"></i> Continue Watching
+      </button>
+    </nav>
+
+    <div class="mt-auto p-4 bg-slate-800/40 rounded-xl border border-slate-700">
+      <p class="text-xs text-slate-400">Logged in as</p>
+      <p class="text-sm font-bold text-white">Beastly Admin</p>
+      <p class="text-[11px] text-slate-400 mt-2">UI v2 • Netflix-style Rows</p>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 w-full pt-16 md:pt-0 p-4 md:p-10 md:ml-0">
+
+    <!-- Top bar desktop -->
+    <div class="hidden md:flex justify-between items-center mb-10">
+      <div class="relative w-full max-w-xl">
+        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
+        <input type="text" id="searchInput" placeholder="Search movies, shows..."
+          class="w-full bg-slate-900 border border-slate-800 p-3 pl-12 rounded-full focus:ring-2 ring-cyan-500 focus:outline-none transition">
+      </div>
+
+      <div class="flex gap-4 ml-4 items-center">
+        <button class="bg-slate-900 border border-slate-800 p-3 rounded-full hover:bg-slate-800">
+          <i class="fas fa-bell"></i>
+        </button>
+        <div class="w-10 h-10 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-full border-2 border-slate-700"></div>
+      </div>
+    </div>
+
+    <!-- Hero -->
+    <section class="relative rounded-3xl overflow-hidden mb-10 shadow-2xl border border-slate-900">
+      <div class="absolute inset-0">
+        <img id="heroImg"
+          src="https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?auto=format&fit=crop&q=80&w=2070"
+          class="w-full h-full object-cover opacity-50">
+        <div class="absolute inset-0 bg-gradient-to-t from-[#080b13] via-black/30 to-transparent"></div>
+      </div>
+
+      <div class="relative p-6 md:p-10 min-h-[18rem] md:min-h-[20rem] flex flex-col justify-end">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="bg-cyan-500 text-[11px] font-black px-3 py-1 rounded-full w-fit tracking-widest">FEATURED</span>
+          <span id="heroMeta" class="text-xs text-slate-300"></span>
+        </div>
+        <h2 id="heroTitle" class="text-4xl md:text-5xl font-black mb-2 uppercase">All of Us Are Dead</h2>
+        <p id="heroDesc" class="text-slate-300 max-w-xl mb-6">A high school becomes ground zero for a zombie virus outbreak…</p>
+        <div class="flex flex-wrap gap-3">
+          <button id="heroPlay" class="bg-white text-black px-7 py-3 rounded-full font-black hover:bg-cyan-400 transition">
+            <i class="fa-solid fa-play mr-2"></i> Play
+          </button>
+          <button id="heroAdd" class="bg-slate-900/80 border border-slate-800 px-7 py-3 rounded-full font-black hover:bg-slate-800 transition">
+            <i class="fa-solid fa-bookmark mr-2"></i> My List
+          </button>
+          <button id="heroInfo" class="bg-slate-900/80 border border-slate-800 px-7 py-3 rounded-full font-black hover:bg-slate-800 transition">
+            <i class="fa-solid fa-circle-info mr-2"></i> Info
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pages -->
+    <section id="page-home" class="space-y-10"></section>
+    <section id="page-categories" class="space-y-6 hidden"></section>
+    <section id="page-mylist" class="space-y-6 hidden"></section>
+    <section id="page-recent" class="space-y-6 hidden"></section>
+  </main>
+
+  <!-- Details Modal -->
+  <div id="detailsModal" class="fixed inset-0 z-[80] hidden">
+    <div id="detailsBackdrop" class="absolute inset-0 bg-black/70"></div>
+    <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[94vw] max-w-3xl">
+      <div class="glass border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
+        <div class="relative h-56 md:h-72">
+          <img id="modalImg" class="w-full h-full object-cover opacity-70" src="" alt="">
+          <div class="absolute inset-0 bg-gradient-to-t from-[#080b13] via-black/20 to-transparent"></div>
+          <button id="closeModal" class="absolute top-4 right-4 bg-slate-900/70 border border-slate-700 rounded-full px-3 py-2 hover:bg-slate-800">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
         </div>
 
-        <div class="relative h-80 rounded-3xl overflow-hidden mb-12 shadow-2xl">
-            <img src="https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?auto=format&fit=crop&q=80&w=2070" class="w-full h-full object-cover opacity-50">
-            <div class="absolute inset-0 bg-gradient-to-t from-[#080b13] via-transparent p-10 flex flex-col justify-end">
-                <span class="bg-cyan-500 text-xs font-bold px-3 py-1 rounded-full w-fit mb-4">TRENDING SERIES</span>
-                <h2 class="text-5xl font-black mb-2 uppercase">All of Us Are Dead</h2>
-                <p class="text-slate-300 max-w-md mb-6">A high school becomes ground zero for a zombie virus outbreak. Trapped students must fight their way out.</p>
-                <div class="flex gap-4">
-                    <button class="bg-white text-black px-8 py-3 rounded-full font-bold hover:bg-cyan-400 transition">Play Now</button>
-                    <button class="bg-slate-800/80 px-8 py-3 rounded-full font-bold backdrop-blur-md">Add Library</button>
-                </div>
+        <div class="p-6">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 id="modalTitle" class="text-2xl md:text-3xl font-black"></h3>
+              <p id="modalMeta" class="text-sm text-slate-300 mt-1"></p>
             </div>
+
+            <div class="flex gap-2">
+              <button id="modalPlay" class="bg-white text-black px-5 py-2 rounded-full font-black hover:bg-cyan-400 transition">
+                <i class="fa-solid fa-play mr-2"></i> Play
+              </button>
+              <button id="modalList" class="bg-slate-900 border border-slate-800 px-5 py-2 rounded-full font-black hover:bg-slate-800 transition">
+                <i class="fa-solid fa-bookmark mr-2"></i> My List
+              </button>
+            </div>
+          </div>
+
+          <p id="modalDesc" class="text-slate-300 mt-4 leading-relaxed"></p>
+
+          <div class="mt-6 flex items-center gap-3 text-xs text-slate-400">
+            <span class="px-3 py-1 rounded-full border border-slate-700 bg-slate-900/60">Tip: Space = Play/Pause</span>
+            <span class="px-3 py-1 rounded-full border border-slate-700 bg-slate-900/60">← / → = Seek</span>
+            <span class="px-3 py-1 rounded-full border border-slate-700 bg-slate-900/60">F = Fullscreen</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Video Player Fullscreen Overlay -->
+  <div id="video-player-container" class="fixed inset-0 z-[90] hidden bg-black">
+    <div id="playerWrap" class="relative w-full h-full">
+      <video id="mainPlayer" playsinline class="w-full h-full bg-black"></video>
+
+      <!-- overlay UI -->
+      <div id="playerOverlay" class="absolute inset-0 flex flex-col justify-between p-4 md:p-6">
+        <div class="flex items-center justify-between">
+          <button id="closePlayerBtn" class="bg-slate-900/60 border border-slate-700 rounded-full px-4 py-2 hover:bg-slate-800">
+            <i class="fa-solid fa-arrow-left mr-2"></i> Back
+          </button>
+
+          <div class="flex items-center gap-2">
+            <button id="pipBtn" class="bg-slate-900/60 border border-slate-700 rounded-full px-4 py-2 hover:bg-slate-800">
+              <i class="fa-solid fa-clone mr-2"></i> PiP
+            </button>
+            <button id="fsBtn" class="bg-slate-900/60 border border-slate-700 rounded-full px-4 py-2 hover:bg-slate-800">
+              <i class="fa-solid fa-expand mr-2"></i> Fullscreen
+            </button>
+          </div>
         </div>
 
-        <h3 class="text-2xl font-bold mb-6 flex items-center gap-3">
+        <div class="flex items-center justify-center gap-3">
+          <button id="back10" class="bg-slate-900/60 border border-slate-700 rounded-full px-5 py-3 hover:bg-slate-800">
+            <i class="fa-solid fa-rotate-left mr-2"></i> 10s
+          </button>
+          <button id="togglePlay" class="bg-white text-black rounded-full px-7 py-4 font-black hover:bg-cyan-400 transition">
+            <i class="fa-solid fa-play mr-2"></i> Play
+          </button>
+          <button id="fwd10" class="bg-slate-900/60 border border-slate-700 rounded-full px-5 py-3 hover:bg-slate-800">
+            10s <i class="fa-solid fa-rotate-right ml-2"></i>
+          </button>
+        </div>
+
+        <div class="glass border border-slate-800 rounded-2xl p-3">
+          <div class="flex items-center justify-between text-xs text-slate-200 mb-2">
+            <span id="timeNow">0:00</span>
+            <span id="timeTotal">0:00</span>
+          </div>
+          <input id="seekBar" type="range" min="0" max="1000" value="0" class="w-full">
+          <div class="flex items-center justify-between mt-3">
+            <button id="muteBtn" class="text-slate-200 hover:text-cyan-400">
+              <i class="fa-solid fa-volume-high"></i>
+            </button>
+            <div class="flex items-center gap-3">
+              <button id="qualityHint" class="text-xs px-3 py-1 rounded-full border border-slate-700 bg-slate-900/50">
+                If seeking fails → Range headers missing
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tap zones (mobile) -->
+      <div id="tapZones" class="absolute inset-0 grid grid-cols-3">
+        <div id="tapLeft"></div>
+        <div id="tapMid"></div>
+        <div id="tapRight"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // CONFIG: Replace with your Hugging Face Space URL
+    const STREAM_BASE = "https://zbro7-cs.hf.space/stream/";
+
+    // ---- Storage Keys ----
+    const LS_LIST = "beastly_mylist_v1";
+    const LS_PROGRESS = "beastly_progress_v1";
+
+    const $ = (id) => document.getElementById(id);
+
+    let DB = [];
+    let HERO = null;
+    let currentMovie = null;
+    let uiHideTimer = null;
+    let seekDragging = false;
+
+    function readLS(key, fallback) {
+      try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
+      catch { return fallback; }
+    }
+    function writeLS(key, value) {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+
+    function getMyListSet() {
+      return new Set(readLS(LS_LIST, []));
+    }
+    function toggleMyList(id) {
+      const set = getMyListSet();
+      set.has(id) ? set.delete(id) : set.add(id);
+      writeLS(LS_LIST, Array.from(set));
+      renderAllPages();
+    }
+    function getProgressMap() {
+      return readLS(LS_PROGRESS, {}); // { msg_id: seconds }
+    }
+    function setProgress(id, seconds) {
+      const map = getProgressMap();
+      map[id] = seconds;
+      writeLS(LS_PROGRESS, map);
+    }
+
+    function fmtTime(sec) {
+      if (!isFinite(sec) || sec < 0) return "0:00";
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${m}:${String(s).padStart(2,"0")}`;
+    }
+
+    function pickPoster(movie) {
+      // If your database.json has poster, use it. Else fallback.
+      return movie.poster
+        || movie.image
+        || "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?auto=format&fit=crop&q=80&w=900";
+    }
+
+    function metaLine(movie) {
+      const parts = [];
+      if (movie.year) parts.push(movie.year);
+      if (movie.type) parts.push(String(movie.type).toUpperCase());
+      if (movie.genre) parts.push(movie.genre);
+      if (movie.rating) parts.push(`★ ${movie.rating}`);
+      return parts.join(" • ") || "Premium • Streaming";
+    }
+
+    // ---- UI: Drawer ----
+    function openDrawer() {
+      $("sidebar").classList.remove("-translate-x-full");
+      $("drawerBackdrop").classList.remove("hidden");
+    }
+    function closeDrawer() {
+      $("sidebar").classList.add("-translate-x-full");
+      $("drawerBackdrop").classList.add("hidden");
+    }
+
+    // ---- UI: Pages ----
+    function showPage(page) {
+      ["home","categories","mylist","recent"].forEach(p => {
+        $(`page-${p}`).classList.toggle("hidden", p !== page);
+      });
+      closeDrawer();
+    }
+
+    function sectionTitle(title, icon="fa-solid fa-fire") {
+      return `
+        <div class="flex items-center justify-between">
+          <h3 class="text-2xl font-black flex items-center gap-3">
             <span class="w-2 h-8 bg-cyan-500 rounded-full"></span>
-            Continue Watching
-        </h3>
-        
-        <div id="movieGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            ${title}
+          </h3>
+        </div>
+      `;
+    }
+
+    function skeletonRow() {
+      return `
+        <div class="flex gap-4 overflow-hidden">
+          ${Array.from({length:8}).map(() => `
+            <div class="min-w-[160px] md:min-w-[190px]">
+              <div class="aspect-[2/3] rounded-2xl bg-slate-900 border border-slate-800 animate-pulse"></div>
+              <div class="h-3 mt-3 rounded bg-slate-900 border border-slate-800 animate-pulse"></div>
             </div>
-    </main>
+          `).join("")}
+        </div>
+      `;
+    }
 
-    <div id="video-player-container">
-        <button onclick="closePlayer()" class="absolute top-10 right-10 text-3xl text-white hover:text-cyan-400 z-50"><i class="fas fa-times"></i></button>
-        <video id="mainPlayer" controls class="w-full h-full">
-            <source src="" type="video/mp4">
-            Your browser does not support the video tag.
-        </video>
-    </div>
+    function posterCard(movie) {
+      const poster = pickPoster(movie);
+      const id = movie.msg_id;
+      const listSet = getMyListSet();
+      const inList = listSet.has(id);
 
-    <script>
-        // CONFIG: Replace with your Hugging Face Space URL
-        const STREAM_BASE = "https://zbro7-cs.hf.space/stream/";
+      const prog = getProgressMap()[id] ?? 0;
+      const progPct = (movie._duration && prog) ? Math.min(100, (prog / movie._duration) * 100) : 0;
 
-        async function init() {
-            try {
-                const response = await fetch('database.json');
-                const data = await response.json();
-                renderMovies(data);
-                
-                // Search Logic
-                document.getElementById('searchInput').addEventListener('input', (e) => {
-                    const filtered = data.filter(m => m.title.toLowerCase().includes(e.target.value.toLowerCase()));
-                    renderMovies(filtered);
-                });
-            } catch (err) {
-                console.error("Database failed to load", err);
-            }
+      return `
+        <button class="poster min-w-[160px] md:min-w-[190px] text-left"
+          data-id="${id}" aria-label="Open ${movie.title}">
+          <div class="relative aspect-[2/3] rounded-2xl overflow-hidden bg-slate-900 border border-slate-800">
+            <img loading="lazy" src="${poster}" class="w-full h-full object-cover opacity-90" alt="${movie.title}">
+            <div class="absolute inset-0 bg-black/30 opacity-0 hover:opacity-100 transition flex items-center justify-center">
+              <i class="fa-solid fa-play text-4xl text-cyan-400"></i>
+            </div>
+
+            ${progPct > 1 ? `
+              <div class="absolute bottom-0 left-0 right-0 h-1 bg-black/40">
+                <div class="h-full bg-cyan-400" style="width:${progPct}%"></div>
+              </div>` : ``}
+
+            <div class="absolute top-3 right-3">
+              <span class="px-3 py-1 rounded-full text-[11px] font-black border border-slate-700 bg-slate-900/70">
+                ${inList ? "✓ My List" : "+ List"}
+              </span>
+            </div>
+          </div>
+          <div class="mt-3">
+            <div class="font-black text-sm truncate">${movie.title}</div>
+            <div class="text-xs text-slate-400 mt-1 truncate">${metaLine(movie)}</div>
+          </div>
+        </button>
+      `;
+    }
+
+    function buildRow(title, list) {
+      return `
+        <div class="space-y-4">
+          ${sectionTitle(title)}
+          <div class="row-scroll flex gap-4 overflow-x-auto pb-2">
+            ${list.map(posterCard).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderHome() {
+      const home = $("page-home");
+      home.innerHTML = "";
+
+      // Continue Watching: based on progress saved
+      const progress = getProgressMap();
+      const continueList = DB
+        .filter(m => progress[m.msg_id] && progress[m.msg_id] > 5)
+        .slice(0, 16);
+
+      // Trending / For You: simple heuristics
+      const trending = DB.slice(0, 18);
+      const forYou = [...DB].sort(() => Math.random() - 0.5).slice(0, 18);
+
+      home.innerHTML = `
+        ${continueList.length ? buildRow("Continue Watching", continueList) : ""}
+        ${buildRow("Trending Now", trending)}
+        ${buildRow("Recommended For You", forYou)}
+      `;
+
+      wirePosterClicks();
+    }
+
+    function renderMyList() {
+      const page = $("page-mylist");
+      const set = getMyListSet();
+      const items = DB.filter(m => set.has(m.msg_id));
+
+      page.innerHTML = `
+        ${sectionTitle("My List", "fa-solid fa-bookmark")}
+        ${items.length ? `
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6">
+            ${items.map(m => `
+              <div>${posterCard(m)}</div>
+            `).join("")}
+          </div>
+        ` : `
+          <div class="glass border border-slate-800 rounded-3xl p-6">
+            <div class="text-xl font-black">No items yet 😅</div>
+            <div class="text-slate-300 mt-2">Open any title → press “My List”.</div>
+          </div>
+        `}
+      `;
+
+      wirePosterClicks();
+    }
+
+    function renderRecent() {
+      const page = $("page-recent");
+      const progress = getProgressMap();
+
+      const items = DB
+        .filter(m => progress[m.msg_id] && progress[m.msg_id] > 5)
+        .sort((a,b) => (progress[b.msg_id]||0) - (progress[a.msg_id]||0))
+        .slice(0, 40);
+
+      page.innerHTML = `
+        ${sectionTitle("Continue Watching", "fa-solid fa-clock")}
+        ${items.length ? `
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6">
+            ${items.map(m => `<div>${posterCard(m)}</div>`).join("")}
+          </div>
+        ` : `
+          <div class="glass border border-slate-800 rounded-3xl p-6">
+            <div class="text-xl font-black">Nothing to resume 👀</div>
+            <div class="text-slate-300 mt-2">Play something and we’ll save progress automatically.</div>
+          </div>
+        `}
+      `;
+
+      wirePosterClicks();
+    }
+
+    function renderCategories() {
+      const page = $("page-categories");
+      // Very simple category chips; you can generate from DB genres later
+      const chips = ["Action","Drama","Horror","Comedy","Sci-Fi","Anime","Romance","Thriller","Crime"];
+
+      page.innerHTML = `
+        ${sectionTitle("Categories", "fa-solid fa-th-large")}
+        <div class="flex flex-wrap gap-3">
+          ${chips.map(c => `
+            <button class="chip px-5 py-2 rounded-full border border-slate-800 bg-slate-900/70 hover:bg-slate-800 font-black text-sm"
+              data-chip="${c}">${c}</button>
+          `).join("")}
+        </div>
+        <div id="catGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6 pt-2"></div>
+      `;
+
+      const catGrid = $("catGrid");
+      const renderChip = (chip) => {
+        // If your DB has genre field, filter by it; else random fallback
+        const list = DB.filter(m => (m.genre||"").toLowerCase().includes(chip.toLowerCase()));
+        const out = (list.length ? list : DB.slice(0, 25));
+        catGrid.innerHTML = out.map(m => `<div>${posterCard(m)}</div>`).join("");
+        wirePosterClicks();
+      };
+
+      page.querySelectorAll(".chip").forEach(btn => {
+        btn.addEventListener("click", () => renderChip(btn.dataset.chip));
+      });
+
+      renderChip("Action");
+    }
+
+    function renderAllPages() {
+      renderHome();
+      renderCategories();
+      renderMyList();
+      renderRecent();
+    }
+
+    // ---- Hero ----
+    function setHero(movie) {
+      HERO = movie;
+      $("heroImg").src = pickPoster(movie);
+      $("heroTitle").textContent = movie.title || "Featured";
+      $("heroDesc").textContent = movie.desc || movie.description || "Premium streaming experience.";
+      $("heroMeta").textContent = metaLine(movie);
+
+      $("heroPlay").onclick = () => playMovie(movie.msg_id);
+      $("heroAdd").onclick = () => toggleMyList(movie.msg_id);
+      $("heroInfo").onclick = () => openDetails(movie.msg_id);
+    }
+
+    // ---- Details Modal ----
+    function openDetails(id) {
+      const movie = DB.find(m => m.msg_id === id);
+      if (!movie) return;
+      currentMovie = movie;
+
+      $("modalImg").src = pickPoster(movie);
+      $("modalTitle").textContent = movie.title || "Untitled";
+      $("modalDesc").textContent = movie.desc || movie.description || "No description available.";
+      $("modalMeta").textContent = metaLine(movie);
+
+      $("modalPlay").onclick = () => playMovie(movie.msg_id);
+      $("modalList").onclick = () => toggleMyList(movie.msg_id);
+
+      $("detailsModal").classList.remove("hidden");
+    }
+    function closeDetails() {
+      $("detailsModal").classList.add("hidden");
+    }
+
+    // ---- Click wiring ----
+    function wirePosterClicks() {
+      document.querySelectorAll("[data-id]").forEach(btn => {
+        btn.onclick = () => openDetails(btn.dataset.id);
+      });
+    }
+
+    // ---- Player ----
+    function showPlayerUI() {
+      const wrap = $("playerWrap");
+      wrap.classList.add("show-ui");
+      clearTimeout(uiHideTimer);
+      uiHideTimer = setTimeout(() => wrap.classList.remove("show-ui"), 2500);
+    }
+
+    function openPlayer() {
+      $("video-player-container").classList.remove("hidden");
+      $("playerWrap").classList.add("show-ui");
+      showPlayerUI();
+    }
+
+    function closePlayer() {
+      const video = $("mainPlayer");
+      try { video.pause(); } catch {}
+      $("video-player-container").classList.add("hidden");
+      $("playerWrap").classList.remove("show-ui");
+    }
+
+    async function tryPiP() {
+      const video = $("mainPlayer");
+      try {
+        if (document.pictureInPictureElement) await document.exitPictureInPicture();
+        else await video.requestPictureInPicture();
+      } catch {}
+    }
+
+    function toggleFullscreen() {
+      const wrap = $("video-player-container");
+      if (!document.fullscreenElement) wrap.requestFullscreen?.();
+      else document.exitFullscreen?.();
+    }
+
+    function togglePlay() {
+      const v = $("mainPlayer");
+      if (v.paused) v.play();
+      else v.pause();
+    }
+
+    function seekBy(delta) {
+      const v = $("mainPlayer");
+      // This will only work properly if server supports Range seeking.
+      try { v.currentTime = Math.max(0, (v.currentTime || 0) + delta); } catch {}
+    }
+
+    function setPlayButtonState() {
+      const v = $("mainPlayer");
+      const btn = $("togglePlay");
+      btn.innerHTML = v.paused
+        ? `<i class="fa-solid fa-play mr-2"></i> Play`
+        : `<i class="fa-solid fa-pause mr-2"></i> Pause`;
+    }
+
+    function playMovie(id) {
+      closeDetails();
+      openPlayer();
+
+      const video = $("mainPlayer");
+      const url = STREAM_BASE + id;
+
+      // reset old
+      video.removeAttribute("src");
+      video.load();
+
+      video.src = url;
+      video.controls = false; // We use our overlay controls (less glitchy)
+      video.preload = "auto";
+
+      // Resume if available
+      const resumeAt = getProgressMap()[id] || 0;
+
+      video.onloadedmetadata = () => {
+        // Store duration for UI bars
+        const movie = DB.find(m => m.msg_id === id);
+        if (movie) movie._duration = video.duration;
+
+        $("timeTotal").textContent = fmtTime(video.duration);
+        if (resumeAt > 5 && resumeAt < (video.duration - 5)) {
+          try { video.currentTime = resumeAt; } catch {}
+        }
+        video.play().catch(() => {});
+        setPlayButtonState();
+      };
+
+      video.ontimeupdate = () => {
+        if (!seekDragging) {
+          const pct = video.duration ? (video.currentTime / video.duration) : 0;
+          $("seekBar").value = Math.floor(pct * 1000);
+          $("timeNow").textContent = fmtTime(video.currentTime);
+          $("timeTotal").textContent = fmtTime(video.duration);
+        }
+        // Persist progress
+        if (isFinite(video.currentTime) && video.currentTime > 1) setProgress(id, video.currentTime);
+      };
+
+      video.onplay = setPlayButtonState;
+      video.onpause = setPlayButtonState;
+
+      // Keep UI visible on interaction
+      ["mousemove","click","touchstart"].forEach(ev => {
+        $("playerWrap").addEventListener(ev, showPlayerUI, { passive:true });
+      });
+    }
+
+    // ---- Init ----
+    async function init() {
+      // show skeleton first
+      $("page-home").innerHTML = skeletonRow();
+
+      try {
+        const response = await fetch("database.json", { cache: "no-store" });
+        DB = await response.json();
+
+        // Pick best hero: first item, or random
+        setHero(DB[0] || { title:"Featured", msg_id:"", desc:"" });
+
+        // Search
+        const searchInput = $("searchInput");
+        if (searchInput) {
+          searchInput.addEventListener("input", (e) => {
+            const q = e.target.value.trim().toLowerCase();
+            if (!q) return renderAllPages();
+
+            const hit = DB.filter(m => (m.title||"").toLowerCase().includes(q));
+            $("page-home").innerHTML = `
+              ${sectionTitle(`Results for "${q}"`)}
+              <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6">
+                ${hit.map(m => `<div>${posterCard(m)}</div>`).join("")}
+              </div>
+            `;
+            wirePosterClicks();
+            showPage("home");
+          });
         }
 
-        function renderMovies(movies) {
-            const grid = document.getElementById('movieGrid');
-            grid.innerHTML = '';
-            movies.forEach(movie => {
-                const div = document.createElement('div');
-                div.className = "movie-card bg-slate-900 rounded-2xl overflow-hidden shadow-xl cursor-pointer";
-                div.innerHTML = `
-                    <div class="aspect-video bg-slate-800 relative group">
-                        <img src="https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?auto=format&fit=crop&q=80&w=400" class="w-full h-full object-cover">
-                        <div class="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
-                            <i class="fas fa-play text-4xl text-cyan-400"></i>
-                        </div>
-                    </div>
-                    <div class="p-4">
-                        <h4 class="font-bold text-sm truncate">${movie.title}</h4>
-                        <p class="text-xs text-slate-500 mt-1 uppercase tracking-widest">Action • Horror</p>
-                    </div>
-                `;
-                div.onclick = () => playMovie(movie.msg_id);
-                grid.appendChild(div);
-            });
-        }
+        renderAllPages();
+        showPage("home");
 
-        function playMovie(id) {
-            const container = document.getElementById('video-player-container');
-            const video = document.getElementById('mainPlayer');
-            video.src = STREAM_BASE + id;
-            container.style.display = 'flex';
-            video.play();
-        }
+      } catch (err) {
+        console.error("Database failed to load", err);
+        $("page-home").innerHTML = `
+          <div class="glass border border-slate-800 rounded-3xl p-6">
+            <div class="text-xl font-black">database.json failed to load ❌</div>
+            <div class="text-slate-300 mt-2">Check path + CORS + hosting. Open DevTools console.</div>
+          </div>
+        `;
+      }
+    }
 
-        function closePlayer() {
-            const container = document.getElementById('video-player-container');
-            const video = document.getElementById('mainPlayer');
-            video.pause();
-            container.style.display = 'none';
-        }
+    // ---- Events ----
+    // Drawer
+    $("openDrawer")?.addEventListener("click", openDrawer);
+    $("drawerBackdrop").addEventListener("click", closeDrawer);
 
-        init();
-    </script>
+    // Search open (mobile): focus desktop input if exists; else quick alert
+    $("openSearch")?.addEventListener("click", () => {
+      closeDrawer();
+      const inp = $("searchInput");
+      if (inp) { inp.scrollIntoView({ behavior:"smooth" }); inp.focus(); }
+      else alert("Search is on desktop top bar. Add a mobile search panel if you want.");
+    });
+
+    // Nav buttons
+    document.querySelectorAll(".navbtn").forEach(btn => {
+      btn.addEventListener("click", () => showPage(btn.dataset.page));
+    });
+
+    // Modal
+    $("closeModal").addEventListener("click", closeDetails);
+    $("detailsBackdrop").addEventListener("click", closeDetails);
+
+    // Player controls
+    $("closePlayerBtn").addEventListener("click", closePlayer);
+    $("togglePlay").addEventListener("click", togglePlay);
+    $("back10").addEventListener("click", () => seekBy(-10));
+    $("fwd10").addEventListener("click", () => seekBy(10));
+    $("pipBtn").addEventListener("click", tryPiP);
+    $("fsBtn").addEventListener("click", toggleFullscreen);
+    $("muteBtn").addEventListener("click", () => {
+      const v = $("mainPlayer");
+      v.muted = !v.muted;
+      $("muteBtn").innerHTML = v.muted ? `<i class="fa-solid fa-volume-xmark"></i>` : `<i class="fa-solid fa-volume-high"></i>`;
+    });
+
+    // Seekbar (custom)
+    $("seekBar").addEventListener("input", () => {
+      seekDragging = true;
+    });
+    $("seekBar").addEventListener("change", (e) => {
+      const v = $("mainPlayer");
+      const pct = Number(e.target.value) / 1000;
+      if (v.duration && isFinite(v.duration)) {
+        try { v.currentTime = pct * v.duration; } catch {}
+      }
+      seekDragging = false;
+      showPlayerUI();
+    });
+
+    // Tap zones (mobile): left/back 10s, mid toggle UI/play, right forward 10s
+    // We also prevent the "double tap reset" by blocking dblclick defaults.
+    ["tapLeft","tapMid","tapRight"].forEach(id => {
+      $(id).addEventListener("dblclick", (e) => e.preventDefault());
+    });
+
+    $("tapLeft").addEventListener("click", () => { showPlayerUI(); seekBy(-10); });
+    $("tapRight").addEventListener("click", () => { showPlayerUI(); seekBy(10); });
+    $("tapMid").addEventListener("click", () => {
+      const wrap = $("playerWrap");
+      wrap.classList.toggle("show-ui");
+      showPlayerUI();
+    });
+
+    // Keyboard shortcuts
+    window.addEventListener("keydown", (e) => {
+      const playerOpen = !$("video-player-container").classList.contains("hidden");
+      if (!playerOpen) return;
+
+      if (e.key === " ") { e.preventDefault(); togglePlay(); }
+      if (e.key.toLowerCase() === "f") toggleFullscreen();
+      if (e.key.toLowerCase() === "m") $("muteBtn").click();
+      if (e.key === "ArrowLeft") seekBy(-5);
+      if (e.key === "ArrowRight") seekBy(5);
+      showPlayerUI();
+    });
+
+    // Clicking video toggles play
+    $("mainPlayer").addEventListener("click", () => { togglePlay(); showPlayerUI(); });
+
+    init();
+  </script>
 </body>
-</html>
+            </html>
