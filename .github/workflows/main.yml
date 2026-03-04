@@ -33,10 +33,14 @@ jobs:
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
         run: python upload_script.py
 
-      - name: Commit and Push Database
+            - name: Commit and Push Database
         run: |
-          git config --global user.name "telecstorage"
-          git config --global user.email "telecstorage@gmail.com"
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          # Pull first to make sure we don't have conflicts
+          git pull origin main --rebase
           git add database.json
-          git commit -m "Update movie database" || echo "No changes"
-          git push
+          git commit -m "Update movie database" || echo "No changes to commit"
+          # Try pushing with a higher postBuffer for large files/shaky connections
+          git config http.postBuffer 524288000
+          git push origin main
