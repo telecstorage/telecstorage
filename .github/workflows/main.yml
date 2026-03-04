@@ -33,7 +33,7 @@ jobs:
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
         run: python upload_script.py
 
-            - name: Commit and Push Database
+      - name: Commit and Push Database
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
