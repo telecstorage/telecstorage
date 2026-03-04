@@ -1,7 +1,14 @@
 [
-    {
-        "title": "bolt-detection.mp4",
-        "msg_id": 6,
-        "file_name": "bolt-detection.mp4"
-    }
+    { "title": "All of Us Are Dead - E01", "msg_id": 24, "file_name": "E01.mkv" },
+    { "title": "All of Us Are Dead - E02", "msg_id": 19, "file_name": "E02.mkv" },
+    { "title": "All of Us Are Dead - E03", "msg_id": 17, "file_name": "E03.mkv" },
+    { "title": "All of Us Are Dead - E04", "msg_id": 21, "file_name": "E04.mkv" },
+    { "title": "All of Us Are Dead - E05", "msg_id": 32, "file_name": "E05.mkv" },
+    { "title": "All of Us Are Dead - E06", "msg_id": 29, "file_name": "E06.mkv" },
+    { "title": "All of Us Are Dead - E07", "msg_id": 22, "file_name": "E07.mkv" },
+    { "title": "All of Us Are Dead - E08", "msg_id": 31, "file_name": "E08.mkv" },
+    { "title": "All of Us Are Dead - E09", "msg_id": 30, "file_name": "E09.mkv" },
+    { "title": "All of Us Are Dead - E10", "msg_id": 26, "file_name": "E10.mkv" },
+    { "title": "All of Us Are Dead - E11", "msg_id": 23, "file_name": "E11.mkv" },
+    { "title": "All of Us Are Dead - E12", "msg_id": 27, "file_name": "E12.mkv" }
 ]
