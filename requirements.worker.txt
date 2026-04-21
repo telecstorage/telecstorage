@@ -1,0 +1,4 @@
+# requirements.worker.txt
+# Installed by GitHub Actions before running worker.py
+telethon>=1.36.0
+supabase>=2.4.0
