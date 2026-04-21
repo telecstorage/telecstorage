@@ -1,46 +1,91 @@
-name: Beastly Torrent Transporter
+# ─────────────────────────────────────────────────────────────────────────────
+# .github/workflows/main.yml
+#
+# InFlex Debrid Worker — GitHub Actions
+# ─────────────────────────────────────────────────────────────────────────────
+# Triggered by:
+#   Render backend → POST /repos/{owner}/{repo}/dispatches
+#     { "event_type": "inflex_leech", "client_payload": { ... } }
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions → New):
+#   SUPABASE_URL           https://xxx.supabase.co
+#   SUPABASE_SERVICE_KEY   service_role JWT
+#   TG_API_ID              integer from my.telegram.org
+#   TG_API_HASH            string  from my.telegram.org
+#   TG_STRING_SESSION      Telethon StringSession (see README)
+#   TG_CHANNEL_ID          numeric id, e.g. -1001234567890
+#   WORKER_SECRET          shared secret matching Render env
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: InFlex Debrid Worker
+
 on:
-  workflow_dispatch:
-    inputs:
-      torrent_url:
-        description: 'Direct Link to .torrent file or Magnet Link'
-        required: true
+  repository_dispatch:
+    types: [inflex_leech]   # must match event_type in app.py
+
+# Cancel any in-progress run for the SAME imdb_id+quality so we never
+# double-upload the same file if Render fires a duplicate dispatch.
+concurrency:
+  group: leech-${{ github.event.client_payload.imdb_id }}-${{ github.event.client_payload.quality }}
+  cancel-in-progress: false   # keep running; second call hits idempotency guard
 
 jobs:
-  upload:
+  leech:
+    name: "Leech ${{ github.event.client_payload.imdb_id }} (${{ github.event.client_payload.quality }})"
     runs-on: ubuntu-latest
+    timeout-minutes: 120   # safety ceiling — most movies finish in 15–40 min
+
     steps:
-      - name: Checkout Code
+      # ── 1. Checkout repo so worker.py is available ─────────────────────────
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Tools
+      # ── 2. Python environment ──────────────────────────────────────────────
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ── 3. Install system deps ─────────────────────────────────────────────
+      - name: Install aria2c
         run: |
-          sudo apt-get update
+          sudo apt-get update -qq
           sudo apt-get install -y aria2
-          pip install pyrogram tgcrypto
+          aria2c --version | head -1
 
-      - name: Download Torrent
-        run: |
-          # This will try to download for 15 minutes (900s). 
-          # If it hits 99% and stalls, it will force move to the next step.
-          timeout 900 aria2c --seed-time=0 --dir=./downloads "${{ github.event.inputs.torrent_url }}" || true
+      # ── 4. Install Python deps ─────────────────────────────────────────────
+      - name: Install Python dependencies
+        run: pip install -r requirements.worker.txt
 
-      - name: Run Uploader
+      # ── 5. Run the worker ──────────────────────────────────────────────────
+      #
+      #  All job parameters come from client_payload (sent by Render).
+      #  All secrets come from GitHub Secrets — never from the payload.
+      #  The WORKER_SECRET check inside worker.py prevents rogue dispatches.
+      #
+      - name: Run worker
         env:
-          API_ID: ${{ secrets.API_ID }}
-          API_HASH: ${{ secrets.API_HASH }}
-          SESSION_STRING: ${{ secrets.SESSION_STRING }}
-          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-        run: python upload_script.py
+          # ── Secrets ────────────────────────────────────────────────────────
+          SUPABASE_URL:          ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY:  ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TG_API_ID:             ${{ secrets.TG_API_ID }}
+          TG_API_HASH:           ${{ secrets.TG_API_HASH }}
+          TG_STRING_SESSION:     ${{ secrets.TG_STRING_SESSION }}
+          TG_CHANNEL_ID:         ${{ secrets.TG_CHANNEL_ID }}
+          WORKER_SECRET:         ${{ secrets.WORKER_SECRET }}
+          # ── Job params from repository_dispatch payload ────────────────────
+          JOB_IMDB_ID:           ${{ github.event.client_payload.imdb_id }}
+          JOB_QUALITY:           ${{ github.event.client_payload.quality }}
+          JOB_MAGNET:            ${{ github.event.client_payload.magnet_link }}
+          JOB_TITLE:             ${{ github.event.client_payload.title }}
+          JOB_WORKER_SECRET:     ${{ github.event.client_payload.worker_secret }}
+        run: python worker.py
 
-      - name: Commit and Push Database
-        run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
-          # Pull first to make sure we don't have conflicts
-          git pull origin main --rebase
-          git add database.json
-          git commit -m "Update movie database" || echo "No changes to commit"
-          # Try pushing with a higher postBuffer for large files/shaky connections
-          git config http.postBuffer 524288000
-          git push origin main
+      # ── 6. Upload aria2c logs as artifact on failure ───────────────────────
+      - name: Upload debug logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: "worker-logs-${{ github.event.client_payload.imdb_id }}"
+          path: /tmp/inflex/
+          retention-days: 3
