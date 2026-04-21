@@ -11,7 +11,7 @@ Flow
   3.  Run aria2c to download the torrent
   4.  Connect to Telegram via Telethon StringSession
   5.  Upload the largest video file to the private storage channel
-  6.  Write file_id + status = 'cached' to Supabase
+  6.  Write file_id + message_id + status = 'cached' to Supabase
   7.  Clean up disk, exit 0
 
 GitHub Secrets required (Settings → Secrets and variables → Actions)
@@ -72,6 +72,7 @@ def update_status(
     file_id: str | None = None,
     file_size: int | None = None,
     error_msg: str | None = None,
+    message_id: int | None = None,       # ← NEW: Telegram message ID
 ) -> None:
     """Single source of truth updater — all DB writes go through here."""
     payload: dict = {
@@ -86,6 +87,8 @@ def update_status(
         payload["file_size"] = file_size
     if error_msg is not None:
         payload["error_msg"] = error_msg
+    if message_id is not None:           # ← NEW: write message_id to DB
+        payload["message_id"] = message_id
 
     try:
         db.table(TABLE).update(payload).eq("imdb_id", IMDB_ID).eq(
@@ -208,13 +211,17 @@ def _find_video(work_dir: Path) -> Path | None:
 
 
 # ── Telethon upload ───────────────────────────────────────────────────────────
-async def upload_to_telegram(file_path: Path) -> str | None:
+async def upload_to_telegram(file_path: Path) -> tuple[str, int] | None:
     """
     Upload using Telethon + StringSession.
     Telethon avoids the PeerIdInvalid issue Pyrogram has with user-accounts
     and handles files >2 GB natively.
 
-    Returns the file_id string on success, None on failure.
+    Returns (file_id, message_id) tuple on success, None on failure.
+    file_id   = Telegram document ID (str) — stored in Supabase file_id column
+    message_id = Telegram message ID (int) — stored in Supabase message_id column
+                 The stream bot uses message_id to fetch the file directly,
+                 since bots cannot browse channel history.
     """
     file_size = file_path.stat().st_size
     caption   = f"#{IMDB_ID} | {QUALITY} | {TITLE}"
@@ -258,15 +265,13 @@ async def upload_to_telegram(file_path: Path) -> str | None:
             progress_callback=_progress_cb,
         )
 
-        # Extract file_id from the resulting message
-        # Telethon wraps it in document attributes
         doc = message.document
         if doc:
-            # Use "<type>:<id>:<access_hash>:<file_reference_hex>" format
-            # Flutter / TGFileStreamBot needs the numeric document id
-            file_id = str(doc.id)
-            print(f"[Telethon] Upload complete → doc.id={file_id}")
-            return file_id
+            file_id    = str(doc.id)       # Telegram document ID
+            message_id = message.id        # Telegram message ID ← NEW
+
+            print(f"[Telethon] Upload complete → doc.id={file_id}, msg_id={message_id}")
+            return file_id, message_id     # ← return both
 
         print("[Telethon] Upload succeeded but no document in response", file=sys.stderr)
         return None
@@ -300,10 +305,12 @@ async def main() -> None:
         file_size = video_path.stat().st_size
 
         # ── Upload ────────────────────────────────────────────────────────────
-        file_id = await upload_to_telegram(video_path)
-        if file_id is None:
+        result = await upload_to_telegram(video_path)
+        if result is None:
             update_status("error", error_msg="Telegram upload failed")
             sys.exit(1)
+
+        file_id, msg_id = result           # ← unpack both IDs
 
         # ── Mark cached ───────────────────────────────────────────────────────
         update_status(
@@ -311,8 +318,9 @@ async def main() -> None:
             progress=100,
             file_id=file_id,
             file_size=file_size,
+            message_id=msg_id,             # ← save message_id to Supabase
         )
-        print(f"[Worker] ✓ Job complete — {IMDB_ID} cached with file_id={file_id}")
+        print(f"[Worker] ✓ Job complete — {IMDB_ID} cached | file_id={file_id} | msg_id={msg_id}")
 
     except Exception as e:
         print(f"[Worker] UNHANDLED EXCEPTION: {e}", file=sys.stderr)
